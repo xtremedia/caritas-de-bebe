@@ -1,51 +1,54 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import streamlit as st
-from streamlit.logger import get_logger
+from openai import AzureOpenAI
+import os
+import requests
+from PIL import Image
+from io import BytesIO
+import base64
 
-LOGGER = get_logger(__name__)
+# Initialize the OpenAI API client
+client = AzureOpenAI(
+    api_version="2024-02-15-preview",
+    azure_endpoint="https://dalleai3.openai.azure.com/",
+    api_key=os.environ["AZURE_OPENAI_API_KEY"],
+)
 
+# Function to send image edit requests to OpenAI
+def edit_image_with_prompt(image_data, prompt):
+    ''' Edit an image based on a textual prompt using OpenAI's DALL-E 3.'''
+    image_b64 = base64.b64encode(image_data).decode('utf-8')
 
-def run():
-    st.set_page_config(
-        page_title="Hello",
-        page_icon="👋",
+    response = client.images.edit(
+        model="Dalle3",
+        image=image_b64,
+        prompt=prompt,
     )
 
-    st.write("# Welcome to Streamlit! 👋")
+    # Assuming the response has a direct link to the image
+    image_url = response['data']['url']
+    response = requests.get(image_url)
+    img = Image.open(BytesIO(response.content))
+    return img
 
-    st.sidebar.success("Select a demo above.")
+# Streamlit app layout
+st.title('DALL-E 2 Image Editor')
+st.write('Upload an image and enter a prompt to edit it.')
 
-    st.markdown(
-        """
-        Streamlit is an open-source app framework built specifically for
-        Machine Learning and Data Science projects.
-        **👈 Select a demo from the sidebar** to see some examples
-        of what Streamlit can do!
-        ### Want to learn more?
-        - Check out [streamlit.io](https://streamlit.io)
-        - Jump into our [documentation](https://docs.streamlit.io)
-        - Ask a question in our [community
-          forums](https://discuss.streamlit.io)
-        ### See more complex demos
-        - Use a neural net to [analyze the Udacity Self-driving Car Image
-          Dataset](https://github.com/streamlit/demo-self-driving)
-        - Explore a [New York City rideshare dataset](https://github.com/streamlit/demo-uber-nyc-pickups)
-    """
-    )
+# Upload the image
+uploaded_image = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+prompt = st.text_input("Enter your edit prompt:", "")
 
+# Display the original image
+if uploaded_image is not None:
+    st.image(uploaded_image, caption='Original Image', use_column_width=True)
 
-if __name__ == "__main__":
-    run()
+# Process the image when the user clicks the 'Edit Image' button
+if st.button('Edit Image') and uploaded_image and prompt:
+    # Read the uploaded image
+    image_bytes = uploaded_image.getvalue()
+    
+    # Edit the image
+    edited_img = edit_image_with_prompt(image_bytes, prompt)
+    
+    # Display the edited image
+    st.image(edited_img, caption='Edited Image', use_column_width=True)
